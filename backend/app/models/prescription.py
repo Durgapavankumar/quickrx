@@ -24,7 +24,24 @@ class DrugEntry(BaseModel):
     confidence: float = Field(0.0, ge=0.0, le=1.0)
     confidence_level: ConfidenceLevel = ConfidenceLevel.LOW
     flagged_for_review: bool = False
+    manually_verified: bool = False          # clinician reviewed/corrected this entry
     raw_transcript: Optional[str] = None     # original ASR text for audit trail
+
+
+class DrugEntryUpdate(BaseModel):
+    """
+    Partial update sent when a clinician corrects a drug entry.
+    Only the fields provided are changed; the backend re-validates the drug
+    name against the formulary and marks the entry as manually verified.
+    """
+    drug_name: Optional[str] = None
+    dose: Optional[str] = None
+    dose_unit: Optional[str] = None
+    frequency: Optional[str] = None
+    duration: Optional[str] = None
+    duration_unit: Optional[str] = None
+    route: Optional[str] = None
+    instructions: Optional[str] = None
 
 
 class PatientInfo(BaseModel):
@@ -44,6 +61,13 @@ class PrescriptionSession(BaseModel):
     drugs: list[DrugEntry] = []
     flagged_count: int = 0
     created_at: str
+
+
+class PatientSummary(BaseModel):
+    """One row in the patient history list — aggregated across sessions."""
+    patient_name: str
+    visit_count: int
+    last_visit: str                          # ISO timestamp of most recent session
 
 
 class TranscribeRequest(BaseModel):

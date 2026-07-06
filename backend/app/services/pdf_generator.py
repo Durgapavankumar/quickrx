@@ -86,6 +86,8 @@ def generate_prescription_pdf(session: PrescriptionSession) -> bytes:
         note = ""
         if drug.flagged_for_review:
             note = "⚠ Review"
+        elif drug.manually_verified:
+            note = "✓ Verified"
         elif drug.confidence_level == ConfidenceLevel.HIGH:
             note = "✓"
 
