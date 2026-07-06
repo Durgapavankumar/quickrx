@@ -26,12 +26,27 @@ export const api = {
   deleteSession: (sessionId) =>
     fetch(`${BASE}/sessions/${sessionId}`, { method: "DELETE" }).then(handleResponse),
 
-  updateDrug: (sessionId, drugIndex, drugEntry) =>
+  // Partial update — send only the changed fields. An empty object just
+  // marks the entry as clinician-verified. Backend re-validates the drug
+  // name and unflags the entry.
+  updateDrug: (sessionId, drugIndex, changedFields = {}) =>
     fetch(`${BASE}/sessions/${sessionId}/drugs/${drugIndex}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(drugEntry),
+      body: JSON.stringify(changedFields),
     }).then(handleResponse),
+
+  deleteDrug: (sessionId, drugIndex) =>
+    fetch(`${BASE}/sessions/${sessionId}/drugs/${drugIndex}`, {
+      method: "DELETE",
+    }).then(handleResponse),
+
+  // Patient history
+  listPatients: () => fetch(`${BASE}/patients`).then(handleResponse),
+
+  getPatientHistory: (patientName, limit = 20) =>
+    fetch(`${BASE}/sessions?patient_name=${encodeURIComponent(patientName)}&limit=${limit}`)
+      .then(handleResponse),
 
   // Transcription
   transcribeAudio: (sessionId, audioBlob) => {

@@ -20,9 +20,11 @@ def apply_drug_correction(original: DrugEntry, update: DrugEntryUpdate) -> DrugE
     changed = update.model_dump(exclude_unset=True, exclude_none=True)
 
     for field, value in changed.items():
-        setattr(corrected, field, value.strip() if isinstance(value, str) else value)
+        if isinstance(value, str):
+            value = value.strip() or None    # cleared field → None, not ""
+        setattr(corrected, field, value)
 
-    if "drug_name" in changed:
+    if "drug_name" in changed and corrected.drug_name:
         record, _score = drug_validator.lookup(corrected.drug_name)
         if record:
             corrected.generic_name = record.get("generic_name")
