@@ -1,7 +1,8 @@
 import re
 from app.core.nlp.patterns import (
-    DOSE_PATTERN, DURATION_PATTERN,
-    FREQUENCY_MAP, ROUTE_MAP, INSTRUCTION_PATTERNS
+    DOSE_PATTERN, WORD_DOSE_PATTERN, DOSE_UNIT_ALIASES,
+    DURATION_PATTERN, FREQUENCY_MAP, ROUTE_MAP,
+    INSTRUCTION_PATTERNS, WORD_NUMBERS, DRUG_NOISE_TOKENS,
 )
 from app.core.nlp.validator import drug_validator
 from app.core.config import settings
@@ -36,7 +37,7 @@ class PrescriptionExtractor:
         entry.duration_unit = duration_unit
 
         entry.route = self._extract_route(text)
-        entry.instructions = self._extract_instructions(text)
+        entry.instructions = self._extract_instructions(text, entry.frequency)
 
         entry.confidence = self._compute_confidence(entry, drug_score)
         entry.confidence_level = self._confidence_level(entry.confidence)
@@ -49,29 +50,37 @@ class PrescriptionExtractor:
     # ------------------------------------------------------------------
     def _extract_drug(self, text: str) -> tuple[str | None, dict | None, float]:
         """
-        Strategy:
-        1. Try fuzzy-matching the first 1–3 tokens (drug is usually said first)
-        2. If no match, try sliding window over all tokens
-        3. Return (matched_name, drug_record, score)
+        Slide a 1–3 token window over the transcript, fuzzy-match every
+        candidate against the formulary, and keep the BEST-scoring match
+        (not the first one over threshold — "vitamin" alone must not beat
+        "vitamin d3"). Longer candidates win ties so multi-word drug names
+        aren't truncated. Dose/frequency tokens end the drug name, so
+        windows stop at the first digit.
         """
         tokens = text.split()
+        best: tuple[str | None, dict | None, float] = (None, None, 0.0)
 
-        # Try progressively wider leading token windows
-        for window in [1, 2, 3]:
-            candidate = " ".join(tokens[:window])
-            record, score = drug_validator.lookup(candidate)
-            if record:
-                return candidate, record, score
-
-        # Sliding window fallback — catches "give patient paracetamol 500mg"
         for i in range(len(tokens)):
-            for window in [1, 2]:
-                candidate = " ".join(tokens[i:i+window])
+            first = tokens[i].lower().strip(".,")
+            if first in DRUG_NOISE_TOKENS or (first and first[0].isdigit()):
+                continue
+            for window in (1, 2, 3):
+                cand_tokens = tokens[i:i + window]
+                if len(cand_tokens) < window:
+                    break
+                # a leading digit means we've run into the dose — cut the
+                # window (but keep alphanumeric name parts like "D3", "B12")
+                if window > 1 and cand_tokens[-1][0].isdigit():
+                    break
+                candidate = " ".join(cand_tokens).strip(".,")
                 record, score = drug_validator.lookup(candidate)
-                if record:
-                    return candidate, record, score
+                if record and (
+                    score > best[2]
+                    or (score == best[2] and best[0] and len(candidate) > len(best[0]))
+                ):
+                    best = (candidate, record, score)
 
-        return None, None, 0.0
+        return best
 
     # ------------------------------------------------------------------
     # Dose
@@ -79,7 +88,16 @@ class PrescriptionExtractor:
     def _extract_dose(self, text: str) -> tuple[str | None, str | None]:
         match = DOSE_PATTERN.search(text)
         if match:
-            return match.group(1), match.group(2).lower()
+            unit = re.sub(r"\s+", " ", match.group(2).lower())
+            return match.group(1), DOSE_UNIT_ALIASES.get(unit, unit)
+
+        # word-number tablet doses: "one tablet", "half tablet"
+        match = WORD_DOSE_PATTERN.search(text)
+        if match:
+            number = WORD_NUMBERS.get(match.group(1).lower(), match.group(1))
+            unit = match.group(2).lower()
+            return number, DOSE_UNIT_ALIASES.get(unit, unit)
+
         return None, None
 
     # ------------------------------------------------------------------
@@ -91,7 +109,8 @@ class PrescriptionExtractor:
             if m:
                 # Handle "every N hours" dynamic label
                 if "{0}" in label:
-                    return label.format(m.group(1))
+                    n = m.group(1).lower()
+                    return label.format(WORD_NUMBERS.get(n, n))
                 return label
         return None
 
@@ -101,7 +120,8 @@ class PrescriptionExtractor:
     def _extract_duration(self, text: str) -> tuple[str | None, str | None]:
         match = DURATION_PATTERN.search(text)
         if match:
-            number = match.group(1) or match.group(3)
+            number = (match.group(1) or match.group(3)).lower()
+            number = WORD_NUMBERS.get(number, number)
             unit = (match.group(2) or match.group(4)).lower().rstrip("s") + "s"
             return number, unit
         return None, None
@@ -118,10 +138,13 @@ class PrescriptionExtractor:
     # ------------------------------------------------------------------
     # Instructions
     # ------------------------------------------------------------------
-    def _extract_instructions(self, text: str) -> str | None:
+    def _extract_instructions(self, text: str, frequency: str | None = None) -> str | None:
         found = []
         for pattern, label in INSTRUCTION_PATTERNS:
-            if pattern.search(text):
+            if pattern.search(text) and label not in found:
+                # "at bedtime" is already the frequency — don't repeat it
+                if label == "at bedtime" and frequency == "at bedtime":
+                    continue
                 found.append(label)
         return ", ".join(found) if found else None
 
