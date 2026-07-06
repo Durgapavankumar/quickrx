@@ -80,17 +80,39 @@ Open **http://localhost:5173** — this is your normal local dev workflow, same 
 
 ---
 
-## Part 4 — Next Level: Making It Usable by Others (No Local Backend Required)
+## Part 4 — Docker: One-Command Deployment Anywhere
 
-This is the real "production" step, when you're ready:
+Docker packaging is included. On any machine with Docker (a colleague's laptop,
+a clinic desktop, a VPS):
+
+```bash
+git clone https://github.com/Durgapavankumar/quickrx.git
+cd quickrx
+docker compose up --build
+```
+
+Open **http://localhost:8080** — that's the whole setup. Details:
+
+- **frontend** container: nginx serves the React build and proxies `/api/v1`
+  to the backend container, so the browser talks to a single origin (no CORS,
+  no `VITE_API_URL` juggling).
+- **backend** container: FastAPI + faster-whisper on CPU. The Whisper model
+  (~145 MB) downloads on the first transcription and is cached in the
+  `whisper-models` volume — so the first dictation is slow, the rest are not.
+- **`quickrx-data` volume**: the SQLite database, so sessions and patient
+  history survive `docker compose down` / restarts.
+
+Note: browsers only allow microphone access on `localhost` or HTTPS. Running
+on a remote server therefore needs a TLS reverse proxy (Caddy/Traefik/nginx +
+Let's Encrypt) in front of port 8080.
+
+## Part 5 — Hosting Options
 
 | Option | Cost | Effort | Notes |
 |---|---|---|---|
-| **Render / Railway free tier** | $0 (with limits) | Low | Deploy backend as a web service; free tiers sleep after inactivity |
-| **Your own VPS** (DigitalOcean, etc.) | ~$5–6/month | Medium | Full control, always-on |
+| **Docker on a VPS** (DigitalOcean, Hetzner, etc.) | ~$5–6/month | Low (compose file included) | Always-on; add TLS for mic access; pick ≥2 vCPU for usable Whisper speed |
+| **Render / Railway free tier** | $0 (with limits) | Low | Free tiers sleep after inactivity and are usually too slow for Whisper |
 | **Keep it local-only** | $0 | None | Fine for solo dev / single-clinic demo — no changes needed |
-
-If/when you want this, tell me which option and I'll walk through it — it typically involves a `Dockerfile` (already structured for this — the backend has no OS-specific dependencies) and pointing `VITE_API_URL` at the new backend address instead of `localhost`.
 
 ---
 
