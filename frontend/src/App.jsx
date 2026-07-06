@@ -4,11 +4,11 @@ import { SessionPanel } from "./components/SessionPanel/SessionPanel";
 import { api } from "./api/client";
 
 export default function App() {
-  const [session, setSession]       = useState(null);
-  const [drugs, setDrugs]           = useState([]);
-  const [transcripts, setTranscripts] = useState([]);
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState("");
+  // The server session is the single source of truth — it carries the drug
+  // list, so edits/deletes just replace it with the server's response.
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
 
   const handleStart = async (patientInfo) => {
     setLoading(true);
@@ -16,8 +16,6 @@ export default function App() {
     try {
       const s = await api.createSession(patientInfo);
       setSession(s);
-      setDrugs([]);
-      setTranscripts([]);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -25,21 +23,17 @@ export default function App() {
     }
   };
 
-  const handleDrugAdded = (drugEntry, transcript) => {
-    setDrugs((prev) => [...prev, drugEntry]);
-    setTranscripts((prev) => [...prev, transcript]);
-    // Refresh session to get updated flagged_count
+  const handleDrugAdded = () => {
+    // Transcribe already appended the drug server-side — refresh the session.
     if (session) {
       api.getSession(session.session_id)
-        .then((updated) => setSession(updated))
+        .then(setSession)
         .catch(() => {});
     }
   };
 
   const handleNewSession = () => {
     setSession(null);
-    setDrugs([]);
-    setTranscripts([]);
   };
 
   return (
@@ -70,8 +64,7 @@ export default function App() {
           ) : (
             <SessionPanel
               session={session}
-              drugs={drugs}
-              transcripts={transcripts}
+              onSessionChange={setSession}
               onDrugAdded={handleDrugAdded}
               onNewSession={handleNewSession}
             />

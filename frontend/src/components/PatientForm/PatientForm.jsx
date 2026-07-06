@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "../../api/client";
 
 const today = new Date().toISOString().split("T")[0];
 
@@ -12,8 +13,33 @@ export function PatientForm({ onStart, loading }) {
     doctor_name: "", clinic_name: "",
     patient_name: "", patient_age: "", patient_gender: "", date: today,
   });
+  const [recentPatients, setRecentPatients] = useState([]);
+
+  useEffect(() => {
+    api.listPatients()
+      .then((p) => setRecentPatients(p.slice(0, 8)))
+      .catch(() => {});   // history is a convenience — never block the form
+  }, []);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const pickPatient = async (name) => {
+    setForm((f) => ({ ...f, patient_name: name }));
+    try {
+      // prefill demographics from the patient's most recent visit
+      const [latest] = await api.getPatientHistory(name, 1);
+      if (latest) {
+        setForm((f) => ({
+          ...f,
+          patient_name: name,
+          patient_age: latest.patient_info.patient_age || f.patient_age,
+          patient_gender: latest.patient_info.patient_gender || f.patient_gender,
+        }));
+      }
+    } catch {
+      /* prefill only — name is already set */
+    }
+  };
 
   const handleSubmit = () => {
     if (!form.doctor_name.trim() || !form.patient_name.trim()) return;
@@ -32,6 +58,29 @@ export function PatientForm({ onStart, loading }) {
       </Section>
 
       <Section title="Patient">
+        {recentPatients.length > 0 && (
+          <div>
+            <label style={labelStyle}>Returning patient</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {recentPatients.map((p) => (
+                <button
+                  key={p.patient_name}
+                  type="button"
+                  onClick={() => pickPatient(p.patient_name)}
+                  title={`${p.visit_count} visit${p.visit_count > 1 ? "s" : ""} · last ${p.last_visit.slice(0, 10)}`}
+                  style={{
+                    background: form.patient_name === p.patient_name ? "#2E75B6" : "#fff",
+                    color: form.patient_name === p.patient_name ? "#fff" : "#2E75B6",
+                    border: "1px solid #2E75B6", borderRadius: 14,
+                    padding: "4px 12px", fontSize: 12, cursor: "pointer",
+                  }}
+                >
+                  {p.patient_name} · {p.visit_count}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <Row>
           <Field label="Patient Name *" value={form.patient_name} onChange={set("patient_name")} placeholder="Full name" />
           <Field label="Age" value={form.patient_age} onChange={set("patient_age")} placeholder="e.g. 34" />

@@ -1,4 +1,5 @@
 import json
+import re
 from rapidfuzz import process, fuzz
 from app.core.config import settings
 
@@ -18,12 +19,27 @@ class DrugValidator:
         # Build a flat lookup map: every name/alias → drug record
         self._name_map: dict[str, dict] = {}
         for drug in self._drugs:
-            key = drug["generic_name"].lower()
-            self._name_map[key] = drug
+            for key in self._name_variants(drug["generic_name"]):
+                self._name_map[key] = drug
             for alias in drug.get("aliases", []):
                 self._name_map[alias.lower()] = drug
 
         self._all_names = list(self._name_map.keys())
+
+    @staticmethod
+    def _name_variants(generic_name: str) -> list[str]:
+        """
+        Names like "Vitamin D3 (Cholecalciferol)" are spoken as either half,
+        never with the parentheses — index the full name, the part before the
+        parentheses, and the part inside them.
+        """
+        name = generic_name.lower()
+        variants = [name]
+        m = re.match(r"^(.*?)\s*\((.+?)\)\s*$", name)
+        if m:
+            variants.append(m.group(1).strip())
+            variants.append(m.group(2).strip())
+        return [v for v in variants if v]
 
     def lookup(self, raw_name: str) -> tuple[dict | None, float]:
         """

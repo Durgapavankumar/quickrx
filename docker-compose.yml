@@ -1,0 +1,24 @@
+# QuickRx Voice — one-command deployment:  docker compose up --build
+# Frontend: http://localhost:8080  (nginx, proxies /api/v1 to the backend)
+# Backend:  http://localhost:8000  (FastAPI + Whisper, exposed for API docs)
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - whisper-models:/models   # Whisper model cache — downloaded once
+      - quickrx-data:/data       # SQLite DB — sessions survive restarts
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  whisper-models:
+  quickrx-data:

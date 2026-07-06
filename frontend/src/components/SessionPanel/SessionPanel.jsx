@@ -1,9 +1,29 @@
+import { useState } from "react";
 import { VoiceCapture } from "../VoiceCapture/VoiceCapture";
 import { PrescriptionCard } from "../PrescriptionCard/PrescriptionCard";
+import { PatientHistory } from "../PatientHistory/PatientHistory";
 import { api } from "../../api/client";
+import { formatDoctor } from "../../utils/format";
 
-export function SessionPanel({ session, drugs, transcripts, onDrugAdded, onNewSession }) {
-  const { session_id, patient_info, flagged_count } = session;
+export function SessionPanel({ session, onSessionChange, onDrugAdded, onNewSession }) {
+  const { session_id, patient_info, drugs, flagged_count } = session;
+  const [showHistory, setShowHistory] = useState(false);
+  const [error, setError] = useState("");
+
+  const wrap = (fn) => async (...args) => {
+    setError("");
+    try {
+      const updated = await fn(...args);
+      onSessionChange(updated);
+    } catch (e) {
+      setError(e.message);
+      throw e;   // let the card know the action failed (keeps edit mode open)
+    }
+  };
+
+  const handleSaveDrug   = wrap((index, changed) => api.updateDrug(session_id, index, changed));
+  const handleVerifyDrug = wrap((index) => api.updateDrug(session_id, index, {}));
+  const handleDeleteDrug = wrap((index) => api.deleteDrug(session_id, index));
 
   const handleExportPdf = () => {
     window.open(api.exportPdfUrl(session_id), "_blank");
@@ -31,15 +51,43 @@ export function SessionPanel({ session, drugs, transcripts, onDrugAdded, onNewSe
           <div style={{ fontSize: 16, fontWeight: 700 }}>{patient_info.patient_name}</div>
           <div style={{ fontSize: 12, opacity: 0.75 }}>
             {[patient_info.patient_age, patient_info.patient_gender].filter(Boolean).join(", ")}
-            &nbsp;·&nbsp;Dr. {patient_info.doctor_name}
+            &nbsp;·&nbsp;{formatDoctor(patient_info.doctor_name)}
             {patient_info.clinic_name && ` · ${patient_info.clinic_name}`}
             &nbsp;·&nbsp;{patient_info.date}
           </div>
         </div>
-        <div style={{ fontSize: 12, opacity: 0.7 }}>
-          Session: {session_id.slice(0, 8)}…
+        <div style={{ textAlign: "right" }}>
+          <button
+            onClick={() => setShowHistory((v) => !v)}
+            style={{
+              background: showHistory ? "#2E75B6" : "rgba(255,255,255,0.12)",
+              color: "#fff", border: "1px solid rgba(255,255,255,0.3)",
+              borderRadius: 6, padding: "5px 12px", fontSize: 12,
+              fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            {showHistory ? "Hide History" : "📋 History"}
+          </button>
+          <div style={{ fontSize: 11, opacity: 0.6, marginTop: 5 }}>
+            Session: {session_id.slice(0, 8)}…
+          </div>
         </div>
       </div>
+
+      {/* Past visits for this patient */}
+      {showHistory && (
+        <PatientHistory
+          patientName={patient_info.patient_name}
+          currentSessionId={session_id}
+        />
+      )}
+
+      {error && (
+        <div style={{ background: "#FFEBEE", color: "#b00020", padding: "8px 12px",
+          borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
+          ⚠ {error}
+        </div>
+      )}
 
       {/* Voice recorder */}
       <VoiceCapture
@@ -72,7 +120,9 @@ export function SessionPanel({ session, drugs, transcripts, onDrugAdded, onNewSe
               key={i}
               index={i}
               drug={drug}
-              transcript={transcripts[i]}
+              onSave={handleSaveDrug}
+              onVerify={handleVerifyDrug}
+              onDelete={handleDeleteDrug}
             />
           ))}
         </div>
@@ -85,7 +135,7 @@ export function SessionPanel({ session, drugs, transcripts, onDrugAdded, onNewSe
             ⬇ Export PDF
           </button>
           <button onClick={handleExportJson} style={btnStyle("#2E75B6")}>
-            { } Export JSON
+            {"{ }"} Export JSON
           </button>
           <button onClick={onNewSession} style={btnStyle("#595959")}>
             + New Patient

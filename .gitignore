@@ -9,6 +9,7 @@ __pycache__/
 # Runtime-generated data (not source, regenerated automatically)
 backend/app/data/temp_audio/
 backend/app/data/pdfs/
+backend/app/data/quickrx.db*
 *.wav
 *.webm
 

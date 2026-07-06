@@ -24,27 +24,35 @@ quickrx/
 │   │   ├── models/
 │   │   │   └── prescription.py   # Pydantic schema (fixed JSON contract)
 │   │   ├── services/
-│   │   │   ├── session_store.py  # In-memory session management
+│   │   │   ├── session_store.py  # Store singleton (backend picked by config)
+│   │   │   ├── storage/          # Swappable backends: sqlite.py / memory.py
+│   │   │   ├── corrections.py    # Clinician edits: merge + re-validate + verify
 │   │   │   └── pdf_generator.py  # PDF prescription output
 │   │   ├── api/routes/
-│   │   │   ├── sessions.py       # POST/GET/DELETE sessions
+│   │   │   ├── sessions.py       # Sessions, patient history, drug edit/delete
 │   │   │   ├── transcribe.py     # Audio → transcript → DrugEntry
 │   │   │   └── export.py         # PDF + JSON export
 │   │   └── data/
-│   │       └── drug_dictionary.json  # 200-drug NLEM 2022 formulary
+│   │       ├── drug_dictionary.json  # 200-drug NLEM 2022 formulary
+│   │       └── quickrx.db        # SQLite session store (auto-created)
 │   ├── tests/
-│   │   └── test_extractor.py     # 50-sentence validation suite
+│   │   └── test_extractor.py     # 70-sentence validation suite
+│   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
-│   └── src/
-│       ├── App.jsx
-│       ├── api/client.js         # All API calls in one place
-│       ├── hooks/useRecorder.js  # Browser mic abstraction
-│       └── components/
-│           ├── PatientForm/      # Session start form
-│           ├── VoiceCapture/     # Mic button + status
-│           ├── PrescriptionCard/ # Drug display with confidence badge
-│           └── SessionPanel/     # Full session + export actions
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── api/client.js         # All API calls in one place
+│   │   ├── hooks/useRecorder.js  # Browser mic abstraction
+│   │   └── components/
+│   │       ├── PatientForm/      # Session start form + returning-patient picker
+│   │       ├── VoiceCapture/     # Mic button + status
+│   │       ├── PrescriptionCard/ # Drug display + inline edit/verify/remove
+│   │       ├── PatientHistory/   # Previous visits for the current patient
+│   │       └── SessionPanel/     # Full session + history + export actions
+│   ├── Dockerfile                # Vite build served by nginx (proxies /api/v1)
+│   └── nginx.conf
+├── docker-compose.yml            # One-command deployment (see below)
 └── README.md
 ```
 
@@ -86,6 +94,23 @@ Open: http://localhost:5173
 
 ---
 
+## Run with Docker (one command)
+
+```bash
+docker compose up --build
+```
+
+Open **http://localhost:8080**. The Whisper model (~145 MB) downloads on the
+first transcription and is cached in a volume; the SQLite database lives in a
+volume too, so sessions and patient history survive restarts.
+
+| Container | Port | Notes |
+|---|---|---|
+| frontend | 8080 | nginx serves the React build and proxies `/api/v1` to the backend |
+| backend  | 8000 | FastAPI + Whisper; Swagger docs at http://localhost:8000/docs |
+
+---
+
 ## Running the NLP Validation Suite
 
 ```bash
@@ -94,7 +119,8 @@ source venv/bin/activate
 python tests/test_extractor.py
 ```
 
-Target: ≥90% field-level accuracy on all 50 sentences.
+Target: ≥90% field-level accuracy on all 70 sentences (currently 100%).
+The script exits non-zero if any field falls below target, so it can run in CI.
 
 ---
 
@@ -139,9 +165,26 @@ Browser Mic → Audio Blob → POST /api/v1/transcribe
   "confidence": 1.0,
   "confidence_level": "high",
   "flagged_for_review": false,
+  "manually_verified": false,
   "raw_transcript": "Paracetamol 500mg twice daily for 5 days after food"
 }
 ```
+
+Flagged (low-confidence) entries can be corrected inline in the UI. A clinician
+edit is re-validated against the formulary, marked `manually_verified`, and
+unflagged — the original confidence score is preserved for the audit trail.
+
+---
+
+## Patient History
+
+Sessions persist in SQLite (`STORAGE_BACKEND` in `app/core/config.py`; set
+`QUICKRX_STORAGE=memory` for the old in-memory behaviour). This enables:
+
+- `GET /api/v1/sessions?patient_name=…` — one patient's past visits
+- `GET /api/v1/patients` — all patients with visit counts
+- Returning-patient quick pick on the session form (prefills demographics)
+- "History" toggle inside a session showing previous prescriptions
 
 ---
 
@@ -153,5 +196,5 @@ Each module has a fixed interface — swap independently without touching the re
 |--------|-------------------|-------------------|
 | ASR | Whisper (local) | Cloud ASR API |
 | NLP | Rule-based + RapidFuzz | LLM-based (Claude API) |
-| Storage | In-memory | SQLite / PostgreSQL |
+| Storage | SQLite (✅ done — swappable via `STORAGE_BACKEND`) | PostgreSQL |
 | Formulary | 200-drug NLEM subset | Full NLEM 2022 |

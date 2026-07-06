@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+app/data/temp_audio/
+app/data/pdfs/
+app/data/quickrx.db*

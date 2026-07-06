@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -17,17 +18,22 @@ class Settings:
     FUZZY_MATCH_THRESHOLD: int = 80         # minimum RapidFuzz score to accept a drug match
     CONFIDENCE_FLAG_THRESHOLD: float = 0.6  # extractions below this get flagged for review
 
+    # Storage — "sqlite" (persistent, enables patient history) or "memory"
+    STORAGE_BACKEND: str = os.environ.get("QUICKRX_STORAGE", "sqlite")
+    DB_PATH: Path = Path(os.environ.get("QUICKRX_DB_PATH",
+                                        BASE_DIR / "data" / "quickrx.db"))
+
     # Output
     PDF_OUTPUT_DIR: Path = BASE_DIR / "data" / "pdfs"
     TEMP_AUDIO_DIR: Path = BASE_DIR / "data" / "temp_audio"
 
     # CORS — allowed frontend origins
-    # Local dev server + deployed GitHub Pages URL (update the username below
-    # once you know your GitHub username / repo name).
+    # Local dev server + Docker frontend + deployed GitHub Pages URL.
     CORS_ORIGINS: list = [
         "http://localhost:5173",
         "http://localhost:3000",
-        "https://YOUR-GITHUB-USERNAME.github.io",
+        "http://localhost:8080",
+        "https://durgapavankumar.github.io",
     ]
 
 settings = Settings()
