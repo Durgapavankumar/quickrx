@@ -1,6 +1,11 @@
 # QuickRx Voice — one-command deployment:  docker compose up --build
 # Frontend: http://localhost:8080  (nginx, proxies /api/v1 to the backend)
 # Backend:  http://localhost:8000  (FastAPI + Whisper, exposed for API docs)
+#
+# Always-on hosted deployment (VPS, automatic HTTPS) — adds the caddy service:
+#   cp .env.example .env   &&   edit SITE_ADDRESS
+#   docker compose --profile prod up -d --build
+#   → whole app served at https://$SITE_ADDRESS/  (see DEPLOYMENT.md, Part 6)
 services:
   backend:
     build: ./backend
@@ -19,6 +24,28 @@ services:
       - backend
     restart: unless-stopped
 
+  # Production ingress: terminates TLS (automatic Let's Encrypt) and proxies to
+  # the frontend, which already proxies /api/v1 to the backend — so the whole
+  # app is same-origin over HTTPS. Only runs with `--profile prod`.
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["prod"]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Domain (or <server-ip>.sslip.io) Caddy serves on; set in .env for prod.
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data       # persisted TLS certificates
+      - caddy-config:/config
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
 volumes:
   whisper-models:
   quickrx-data:
+  caddy-data:
+  caddy-config:

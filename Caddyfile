@@ -1,0 +1,9 @@
+# QuickRx Voice — reverse proxy with automatic HTTPS.
+# SITE_ADDRESS is injected from the environment (docker-compose.yml / .env).
+# A real domain — or <server-ip>.sslip.io — triggers automatic Let's Encrypt
+# certificates. Caddy proxies to the frontend container, which in turn proxies
+# /api/v1 to the backend, so the whole app is served same-origin over HTTPS.
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy frontend:80
+}
