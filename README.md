@@ -109,6 +109,11 @@ volume too, so sessions and patient history survive restarts.
 | frontend | 8080 | nginx serves the React build and proxies `/api/v1` to the backend |
 | backend  | 8000 | FastAPI + Whisper; Swagger docs at http://localhost:8000/docs |
 
+**Always-on hosted deployment** (public HTTPS URL for everyone, no tunnels):
+add a domain (or a free `<ip>.sslip.io` address) and run
+`docker compose --profile prod up -d --build` — Caddy handles automatic HTTPS.
+See **DEPLOYMENT.md, Part 6**.
+
 ---
 
 ## Running the NLP Validation Suite

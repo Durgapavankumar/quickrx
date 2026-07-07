@@ -103,16 +103,61 @@ Open **http://localhost:8080** — that's the whole setup. Details:
   history survive `docker compose down` / restarts.
 
 Note: browsers only allow microphone access on `localhost` or HTTPS. Running
-on a remote server therefore needs a TLS reverse proxy (Caddy/Traefik/nginx +
-Let's Encrypt) in front of port 8080.
+on a remote server therefore needs HTTPS — which Part 6 sets up automatically.
 
 ## Part 5 — Hosting Options
 
 | Option | Cost | Effort | Notes |
 |---|---|---|---|
-| **Docker on a VPS** (DigitalOcean, Hetzner, etc.) | ~$5–6/month | Low (compose file included) | Always-on; add TLS for mic access; pick ≥2 vCPU for usable Whisper speed |
+| **Docker on a VPS + Caddy** (DigitalOcean, Hetzner, etc.) | ~$5–6/month | Low — see Part 6 | Always-on, automatic HTTPS; pick ≥2 vCPU for usable Whisper speed |
 | **Render / Railway free tier** | $0 (with limits) | Low | Free tiers sleep after inactivity and are usually too slow for Whisper |
 | **Keep it local-only** | $0 | None | Fine for solo dev / single-clinic demo — no changes needed |
+
+## Part 6 — Always-On Hosted Deployment (VPS + Automatic HTTPS)
+
+This makes the whole app reachable at a public HTTPS URL that *anyone* can use —
+no local backend, no tunnels. It adds a **Caddy** reverse proxy (the `caddy`
+service in `docker-compose.yml`, behind the `prod` profile) that terminates TLS
+with automatic Let's Encrypt certificates and proxies to the app. Because the
+frontend already proxies `/api/v1` to the backend, everything is served
+same-origin over HTTPS — so there are no CORS or mixed-content issues.
+
+### 1. Get a server
+A small VPS with **≥2 vCPU and 2–4 GB RAM** (Ubuntu), and Docker installed:
+```bash
+curl -fsSL https://get.docker.com | sh
+```
+
+### 2. Give it an address Caddy can get a certificate for
+Either point a **domain**'s DNS `A` record at the server's IP, **or** — if you
+don't have a domain — use **sslip.io**, which resolves `<ip>.sslip.io` to that
+IP, giving you real HTTPS on a bare server IP with nothing to buy.
+
+### 3. Deploy
+```bash
+git clone https://github.com/Durgapavankumar/quickrx.git
+cd quickrx
+cp .env.example .env
+# edit .env → set SITE_ADDRESS to your domain or <server-ip>.sslip.io
+docker compose --profile prod up -d --build
+```
+
+### 4. Open it
+Visit **https://your-domain/** (or `https://<ip>.sslip.io/`). The first
+dictation is slow while Whisper downloads (~145 MB, cached afterwards). Sessions
+and patient history persist in the `quickrx-data` volume; TLS certs persist in
+`caddy-data`, so restarts are instant and don't re-request certificates.
+
+### 5. Lock down the firewall
+Allow only **22 (SSH), 80, and 443** inbound. Ports 8000/8080 are used
+internally by the containers and don't need to be public.
+
+### Optional — keep the GitHub Pages URL working too
+The `github.io` site is separate and still points at `localhost`. To make it use
+this hosted backend instead, set `frontend/.env.production` to
+`VITE_API_URL=https://your-domain/api/v1` and push (the backend's `CORS_ORIGINS`
+in `app/core/config.py` already allows `https://durgapavankumar.github.io`). Most
+people just use the VPS URL directly and ignore the Pages one.
 
 ---
 
