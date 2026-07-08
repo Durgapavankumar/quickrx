@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PatientForm } from "./components/PatientForm/PatientForm";
 import { SessionPanel } from "./components/SessionPanel/SessionPanel";
+import { BackendSettings } from "./components/BackendSettings/BackendSettings";
 import { api } from "./api/client";
 
 export default function App() {
@@ -46,6 +47,9 @@ export default function App() {
           MVP · English · 200-drug NLEM 2022 Formulary
         </span>
       </div>
+
+      {/* Which backend this app talks to (editable — supports ngrok links) */}
+      <BackendSettings />
 
       {/* Main content */}
       <div style={{ maxWidth: 720, margin: "32px auto", padding: "0 20px" }}>
