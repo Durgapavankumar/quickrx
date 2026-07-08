@@ -80,6 +80,29 @@ Open **http://localhost:5173** — this is your normal local dev workflow, same 
 
 ---
 
+## Part 3.5 — Share a Live Demo with ngrok (no server needed)
+
+To let someone else (e.g. your boss) use the app while the backend runs on
+**your** machine:
+
+1. Start the backend locally: `./start-backend.sh` (or `docker compose up backend`)
+2. Start a tunnel: `ngrok http 8000` → copy the `https://xxxx.ngrok-free.app` URL
+3. Share this link (swap in your tunnel URL):
+
+   ```
+   https://durgapavankumar.github.io/quickrx/?api=https://xxxx.ngrok-free.app
+   ```
+
+The `?api=` parameter tells the deployed frontend which backend to call; it is
+remembered in their browser, so subsequent visits work without the parameter.
+The app's "Backend" bar (under the header) shows the active backend and lets
+anyone change or reset it. Requests include the `ngrok-skip-browser-warning`
+header, so ngrok's free-tier interstitial page is bypassed automatically.
+
+Caveats: the demo only works while your backend **and** tunnel are running, and
+a free ngrok URL changes on every restart — send a fresh link (or update the
+Backend bar) when it does.
+
 ## Part 4 — Docker: One-Command Deployment Anywhere
 
 Docker packaging is included. On any machine with Docker (a colleague's laptop,

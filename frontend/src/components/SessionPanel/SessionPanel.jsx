@@ -25,18 +25,32 @@ export function SessionPanel({ session, onSessionChange, onDrugAdded, onNewSessi
   const handleVerifyDrug = wrap((index) => api.updateDrug(session_id, index, {}));
   const handleDeleteDrug = wrap((index) => api.deleteDrug(session_id, index));
 
-  const handleExportPdf = () => {
-    window.open(api.exportPdfUrl(session_id), "_blank");
+  // Fetched as blobs (not plain links) so the request carries the header that
+  // bypasses ngrok's browser interstitial when tunnelling the backend.
+  const download = (blob, filename) => {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  const handleExportPdf = async () => {
+    setError("");
+    try {
+      download(await api.exportPdfBlob(session_id), `prescription_${session_id.slice(0, 8)}.pdf`);
+    } catch (e) {
+      setError(e.message);
+    }
   };
 
   const handleExportJson = async () => {
-    const url = api.exportJsonUrl(session_id);
-    const res = await fetch(url);
-    const blob = await res.blob();
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `prescription_${session_id.slice(0, 8)}.json`;
-    link.click();
+    setError("");
+    try {
+      download(await api.exportJsonBlob(session_id), `prescription_${session_id.slice(0, 8)}.json`);
+    } catch (e) {
+      setError(e.message);
+    }
   };
 
   return (
