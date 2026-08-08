@@ -112,6 +112,26 @@ export function PatientForm({ onStart, loading }) {
       >
         {loading ? "Starting…" : "Begin consultation →"}
       </button>
+
+      {/* one-click demo session — no typing needed */}
+      <div style={{ textAlign: "center", marginTop: 14 }}>
+        <button
+          type="button"
+          className="link-btn"
+          style={{ fontSize: 13 }}
+          disabled={loading}
+          onClick={() => onStart({
+            doctor_name: "Dr. Test",
+            clinic_name: "Demo Clinic",
+            patient_name: "Test Patient",
+            patient_age: "30",
+            patient_gender: "",
+            date: today,
+          })}
+        >
+          ⚡ or skip the form — quick demo session
+        </button>
+      </div>
     </form>
   );
 }

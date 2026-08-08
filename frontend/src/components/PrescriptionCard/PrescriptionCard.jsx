@@ -141,6 +141,10 @@ export function PrescriptionCard({ drug, index, onSave, onVerify, onDelete }) {
             <Field label="Instructions" value={drug.instructions} />
           </div>
 
+          {drug.dose_alert && (
+            <div className="rx-review-note">⚠ {drug.dose_alert}</div>
+          )}
+
           {flagged && (
             <div className="rx-review-note">
               ⚠ Low confidence — please verify this entry before finalising the prescription.
