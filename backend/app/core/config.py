@@ -15,6 +15,7 @@ class Settings:
 
     # NLP
     DRUG_DICTIONARY_PATH: Path = BASE_DIR / "data" / "drug_dictionary.json"
+    INTERACTION_RULES_PATH: Path = BASE_DIR / "data" / "interactions.json"
     FUZZY_MATCH_THRESHOLD: int = 80         # minimum RapidFuzz score to accept a drug match
     CONFIDENCE_FLAG_THRESHOLD: float = 0.6  # extractions below this get flagged for review
 
