@@ -1,38 +1,26 @@
 import { useState } from "react";
 
-const CONFIDENCE_COLORS = {
-  high:   { bg: "#E2F0E2", border: "#2E7D32", text: "#2E7D32", label: "HIGH" },
-  medium: { bg: "#FFF8E1", border: "#F9A825", text: "#E65100", label: "MEDIUM" },
-  low:    { bg: "#FFEBEE", border: "#C62828", text: "#C62828", label: "LOW" },
+const BADGE_CLASS = {
+  high: "badge-high",
+  medium: "badge-medium",
+  low: "badge-low",
 };
-
-const VERIFIED = { bg: "#E3F2FD", border: "#1565C0", text: "#1565C0", label: "VERIFIED" };
 
 function Field({ label, value }) {
   if (!value) return null;
   return (
-    <div style={{ display: "flex", gap: 6, fontSize: 13, marginBottom: 3 }}>
-      <span style={{ color: "#2E75B6", fontWeight: 600, minWidth: 90, fontSize: 11 }}>
-        {label}
-      </span>
-      <span style={{ color: "#222" }}>{value}</span>
+    <div className="rx-field">
+      <span className="k">{label}</span>
+      <span className="v">{value}</span>
     </div>
   );
 }
 
-const inputStyle = {
-  width: "100%", padding: "5px 8px", borderRadius: 5, boxSizing: "border-box",
-  border: "1px solid #ccd6e0", fontSize: 13,
-};
-
 function EditField({ label, value, onChange, placeholder }) {
   return (
     <div>
-      <label style={{ fontSize: 10, fontWeight: 700, color: "#2E75B6",
-        textTransform: "uppercase", display: "block", marginBottom: 2 }}>
-        {label}
-      </label>
-      <input style={inputStyle} value={value || ""} placeholder={placeholder}
+      <label>{label}</label>
+      <input value={value || ""} placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)} />
     </div>
   );
@@ -48,9 +36,6 @@ export function PrescriptionCard({ drug, index, onSave, onVerify, onDelete }) {
   const [draft, setDraft]     = useState({});
   const [busy, setBusy]       = useState(false);
 
-  const conf = drug.manually_verified
-    ? VERIFIED
-    : (CONFIDENCE_COLORS[drug.confidence_level] || CONFIDENCE_COLORS.low);
   const flagged = drug.flagged_for_review && !drug.manually_verified;
 
   const startEdit = () => {
@@ -89,47 +74,31 @@ export function PrescriptionCard({ drug, index, onSave, onVerify, onDelete }) {
   };
 
   return (
-    <div style={{
-      border: `1px solid ${flagged ? "#C55A11" : conf.border}`,
-      borderLeft: `4px solid ${flagged ? "#C55A11" : conf.border}`,
-      borderRadius: 8, padding: "12px 16px", background: conf.bg,
-      position: "relative", marginBottom: 10,
-    }}>
-      {/* Drug number + name */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+    <div className={`rx-card ${flagged ? "flagged" : ""}`}>
+      {/* Header: number + name + badge */}
+      <div className="rx-card-top">
+        <span className="rx-num">{String(index + 1).padStart(2, "0")}</span>
         <div>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#999" }}>#{index + 1}</span>
-          <span style={{ marginLeft: 8, fontSize: 16, fontWeight: 700, color: "#1F3864" }}>
+          <span className="rx-name">
             {drug.generic_name || drug.drug_name || "Unknown Drug"}
           </span>
-          {drug.category && (
-            <span style={{ marginLeft: 8, fontSize: 10, color: "#666",
-              background: "#e0e8f0", padding: "2px 7px", borderRadius: 12 }}>
-              {drug.category}
-            </span>
-          )}
+          {drug.category && <span className="rx-category">{drug.category}</span>}
         </div>
-
-        {/* Confidence / verified badge */}
-        <div style={{
-          background: conf.bg, border: `1px solid ${conf.border}`,
-          color: conf.text, padding: "2px 9px", borderRadius: 12,
-          fontSize: 10, fontWeight: 700, whiteSpace: "nowrap",
-        }}>
-          {drug.manually_verified ? "✓ VERIFIED"
-            : flagged ? "⚠ REVIEW" : `✓ ${conf.label}`}
-          {!drug.manually_verified && (
-            <span style={{ marginLeft: 4, opacity: 0.7 }}>
-              {Math.round(drug.confidence * 100)}%
-            </span>
-          )}
-        </div>
+        <div className="t-spacer" />
+        {drug.manually_verified ? (
+          <span className="badge badge-verified">✓ Verified</span>
+        ) : (
+          <span className={`badge ${BADGE_CLASS[drug.confidence_level] || "badge-low"}`}>
+            {flagged ? "⚠ Review" : drug.confidence_level}
+            <span className="pct">{Math.round(drug.confidence * 100)}%</span>
+          </span>
+        )}
       </div>
 
       {editing ? (
         /* ---- Edit mode ---- */
         <div>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+          <div className="rx-edit-grid">
             <EditField label="Drug name" value={draft.drug_name}
               onChange={(v) => setDraft((d) => ({ ...d, drug_name: v }))} />
             <EditField label="Dose" value={draft.dose} placeholder="500"
@@ -137,7 +106,7 @@ export function PrescriptionCard({ drug, index, onSave, onVerify, onDelete }) {
             <EditField label="Unit" value={draft.dose_unit} placeholder="mg"
               onChange={(v) => setDraft((d) => ({ ...d, dose_unit: v }))} />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+          <div className="rx-edit-grid">
             <EditField label="Frequency" value={draft.frequency} placeholder="twice daily"
               onChange={(v) => setDraft((d) => ({ ...d, frequency: v }))} />
             <EditField label="Duration" value={draft.duration} placeholder="5"
@@ -145,19 +114,18 @@ export function PrescriptionCard({ drug, index, onSave, onVerify, onDelete }) {
             <EditField label="Unit" value={draft.duration_unit} placeholder="days"
               onChange={(v) => setDraft((d) => ({ ...d, duration_unit: v }))} />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8, marginBottom: 10 }}>
+          <div className="rx-edit-grid" style={{ gridTemplateColumns: "1fr 2fr" }}>
             <EditField label="Route" value={draft.route} placeholder="oral"
               onChange={(v) => setDraft((d) => ({ ...d, route: v }))} />
             <EditField label="Instructions" value={draft.instructions} placeholder="after food"
               onChange={(v) => setDraft((d) => ({ ...d, instructions: v }))} />
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleSave} disabled={busy || !draft.drug_name.trim()}
-              style={smallBtn("#2E7D32")}>
-              {busy ? "Saving..." : "✓ Save & Verify"}
+          <div className="rx-actions">
+            <button className="btn btn-accent btn-sm" onClick={handleSave}
+              disabled={busy || !draft.drug_name.trim()}>
+              {busy ? "Saving…" : "✓ Save & verify"}
             </button>
-            <button onClick={() => setEditing(false)} disabled={busy}
-              style={smallBtn("#595959")}>
+            <button className="btn btn-quiet btn-sm" onClick={() => setEditing(false)} disabled={busy}>
               Cancel
             </button>
           </div>
@@ -165,7 +133,7 @@ export function PrescriptionCard({ drug, index, onSave, onVerify, onDelete }) {
       ) : (
         /* ---- Display mode ---- */
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+          <div className="rx-fields">
             <Field label="Dose" value={drug.dose ? `${drug.dose} ${drug.dose_unit || ""}`.trim() : null} />
             <Field label="Frequency" value={drug.frequency} />
             <Field label="Duration"  value={drug.duration ? `${drug.duration} ${drug.duration_unit || ""}`.trim() : null} />
@@ -174,32 +142,28 @@ export function PrescriptionCard({ drug, index, onSave, onVerify, onDelete }) {
           </div>
 
           {flagged && (
-            <div style={{ marginTop: 8, padding: "6px 10px", background: "#FBE5D6",
-              borderRadius: 6, fontSize: 12, color: "#C55A11", fontWeight: 500 }}>
+            <div className="rx-review-note">
               ⚠ Low confidence — please verify this entry before finalising the prescription.
             </div>
           )}
 
           {drug.raw_transcript && (
-            <div style={{ marginTop: 8, fontSize: 11, color: "#888" }}>
-              <em>Heard: "{drug.raw_transcript}"</em>
-            </div>
+            <div className="rx-heard">Heard: “{drug.raw_transcript}”</div>
           )}
 
           {/* Actions */}
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <button onClick={startEdit} disabled={busy} style={smallBtn("#2E75B6")}>
+          <div className="rx-actions">
+            <button className="btn btn-quiet btn-sm" onClick={startEdit} disabled={busy}>
               ✎ Edit
             </button>
             {flagged && (
-              <button onClick={handleVerify} disabled={busy} style={smallBtn("#2E7D32")}>
-                ✓ Mark Verified
+              <button className="btn btn-accent btn-sm" onClick={handleVerify} disabled={busy}>
+                ✓ Mark verified
               </button>
             )}
-            <button onClick={handleDelete} disabled={busy}
-              style={{ ...smallBtn("transparent"), color: "#C62828",
-                border: "1px solid #C62828", marginLeft: "auto" }}>
-              🗑 Remove
+            <div className="spacer" />
+            <button className="btn btn-danger-quiet" onClick={handleDelete} disabled={busy}>
+              Remove
             </button>
           </div>
         </>
@@ -207,8 +171,3 @@ export function PrescriptionCard({ drug, index, onSave, onVerify, onDelete }) {
     </div>
   );
 }
-
-const smallBtn = (bg) => ({
-  padding: "6px 14px", background: bg, color: "#fff", border: "none",
-  borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer",
-});

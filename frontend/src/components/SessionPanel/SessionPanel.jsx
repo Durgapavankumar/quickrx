@@ -53,38 +53,29 @@ export function SessionPanel({ session, onSessionChange, onDrugAdded, onNewSessi
     }
   };
 
+  const initial = (patient_info.patient_name || "?").trim().charAt(0).toUpperCase();
+
   return (
     <div>
-      {/* Session header */}
-      <div style={{
-        background: "#1F3864", color: "#fff", borderRadius: 10,
-        padding: "14px 20px", marginBottom: 20,
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-      }}>
+      {/* Patient banner */}
+      <div className="card patient-banner">
+        <div className="avatar">{initial}</div>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{patient_info.patient_name}</div>
-          <div style={{ fontSize: 12, opacity: 0.75 }}>
+          <div className="p-name">{patient_info.patient_name}</div>
+          <div className="p-meta">
             {[patient_info.patient_age, patient_info.patient_gender].filter(Boolean).join(", ")}
-            &nbsp;·&nbsp;{formatDoctor(patient_info.doctor_name)}
+            {(patient_info.patient_age || patient_info.patient_gender) && " · "}
+            {formatDoctor(patient_info.doctor_name)}
             {patient_info.clinic_name && ` · ${patient_info.clinic_name}`}
-            &nbsp;·&nbsp;{patient_info.date}
+            {" · "}{patient_info.date}
           </div>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <button
-            onClick={() => setShowHistory((v) => !v)}
-            style={{
-              background: showHistory ? "#2E75B6" : "rgba(255,255,255,0.12)",
-              color: "#fff", border: "1px solid rgba(255,255,255,0.3)",
-              borderRadius: 6, padding: "5px 12px", fontSize: 12,
-              fontWeight: 600, cursor: "pointer",
-            }}
-          >
-            {showHistory ? "Hide History" : "📋 History"}
+        <div className="b-spacer" />
+        <div>
+          <button className="btn btn-quiet btn-sm" onClick={() => setShowHistory((v) => !v)}>
+            {showHistory ? "Hide history" : "History"}
           </button>
-          <div style={{ fontSize: 11, opacity: 0.6, marginTop: 5 }}>
-            Session: {session_id.slice(0, 8)}…
-          </div>
+          <div className="session-id-tag">#{session_id.slice(0, 8)}</div>
         </div>
       </div>
 
@@ -96,12 +87,7 @@ export function SessionPanel({ session, onSessionChange, onDrugAdded, onNewSessi
         />
       )}
 
-      {error && (
-        <div style={{ background: "#FFEBEE", color: "#b00020", padding: "8px 12px",
-          borderRadius: 6, marginBottom: 12, fontSize: 13 }}>
-          ⚠ {error}
-        </div>
-      )}
+      {error && <div className="alert-error">⚠ {error}</div>}
 
       {/* Voice recorder */}
       <VoiceCapture
@@ -112,20 +98,19 @@ export function SessionPanel({ session, onSessionChange, onDrugAdded, onNewSessi
 
       {/* Drug list */}
       {drugs.length === 0 ? (
-        <div style={{ textAlign: "center", color: "#999", padding: "30px 0", fontSize: 14 }}>
-          No drugs added yet. Dictate the first drug above.
+        <div className="empty-note">
+          Nothing prescribed yet — dictate the first drug above.
         </div>
       ) : (
-        <div style={{ marginTop: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <h3 style={{ color: "#1F3864", margin: 0 }}>
-              Prescription ({drugs.length} drug{drugs.length > 1 ? "s" : ""})
-            </h3>
+        <div>
+          <div className="rx-list-head">
+            <h3>Prescription</h3>
+            <span className="count">
+              {drugs.length} drug{drugs.length > 1 ? "s" : ""}
+            </span>
+            <div style={{ flex: 1 }} />
             {flagged_count > 0 && (
-              <span style={{ background: "#FBE5D6", color: "#C55A11",
-                padding: "4px 12px", borderRadius: 12, fontSize: 12, fontWeight: 600 }}>
-                ⚠ {flagged_count} flagged
-              </span>
+              <span className="flag-pill">⚠ {flagged_count} to review</span>
             )}
           </div>
 
@@ -144,24 +129,18 @@ export function SessionPanel({ session, onSessionChange, onDrugAdded, onNewSessi
 
       {/* Actions */}
       {drugs.length > 0 && (
-        <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
-          <button onClick={handleExportPdf} style={btnStyle("#1F3864")}>
-            ⬇ Export PDF
+        <div className="actions-row">
+          <button className="btn btn-primary" onClick={handleExportPdf}>
+            ↓ Export PDF
           </button>
-          <button onClick={handleExportJson} style={btnStyle("#2E75B6")}>
+          <button className="btn btn-accent" onClick={handleExportJson}>
             {"{ }"} Export JSON
           </button>
-          <button onClick={onNewSession} style={btnStyle("#595959")}>
-            + New Patient
+          <button className="btn btn-quiet" onClick={onNewSession}>
+            + New patient
           </button>
         </div>
       )}
     </div>
   );
 }
-
-const btnStyle = (bg) => ({
-  flex: 1, padding: "11px 0", background: bg, color: "#fff",
-  border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600,
-  cursor: "pointer",
-});

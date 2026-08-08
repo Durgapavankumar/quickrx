@@ -22,62 +22,41 @@ export function PatientHistory({ patientName, currentSessionId }) {
     return () => { cancelled = true; };
   }, [patientName, currentSessionId]);
 
+  let body;
   if (error) {
-    return <HistoryBox><span style={{ color: "#b00020" }}>⚠ {error}</span></HistoryBox>;
-  }
-  if (sessions === null) {
-    return <HistoryBox><span style={{ color: "#888" }}>Loading history…</span></HistoryBox>;
-  }
-  if (sessions.length === 0) {
-    return <HistoryBox><span style={{ color: "#888" }}>No previous visits for this patient.</span></HistoryBox>;
-  }
-
-  return (
-    <HistoryBox>
-      {sessions.map((s) => (
-        <div key={s.session_id} style={{
-          padding: "8px 0", borderBottom: "1px solid #e4ecf4",
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-            <span style={{ fontWeight: 700, color: "#1F3864" }}>
-              {s.patient_info.date || s.created_at.slice(0, 10)}
-              {s.patient_info.doctor_name && (
-                <span style={{ fontWeight: 400, color: "#666" }}>
-                  {" "}· {formatDoctor(s.patient_info.doctor_name)}
-                </span>
-              )}
-            </span>
-            <span style={{ color: "#888" }}>
-              {s.drugs.length} drug{s.drugs.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-          {s.drugs.length > 0 && (
-            <div style={{ fontSize: 12, color: "#444", marginTop: 3 }}>
-              {s.drugs.map((d, i) => {
-                const name = d.generic_name || d.drug_name || "Unknown";
-                const dose = d.dose ? ` ${d.dose}${d.dose_unit ? " " + d.dose_unit : ""}` : "";
-                const freq = d.frequency ? `, ${d.frequency}` : "";
-                return <div key={i}>• {name}{dose}{freq}</div>;
-              })}
-            </div>
-          )}
+    body = <span style={{ color: "var(--danger)" }}>⚠ {error}</span>;
+  } else if (sessions === null) {
+    body = <span style={{ color: "var(--faint)" }}>Loading history…</span>;
+  } else if (sessions.length === 0) {
+    body = <span style={{ color: "var(--faint)" }}>No previous visits for this patient.</span>;
+  } else {
+    body = sessions.map((s) => (
+      <div key={s.session_id} className="history-visit">
+        <div className="visit-head">
+          <span className="visit-date">
+            {s.patient_info.date || s.created_at.slice(0, 10)}
+            {s.patient_info.doctor_name && (
+              <span className="visit-doc"> · {formatDoctor(s.patient_info.doctor_name)}</span>
+            )}
+          </span>
+          <span className="visit-count">
+            {s.drugs.length} drug{s.drugs.length !== 1 ? "s" : ""}
+          </span>
         </div>
-      ))}
-    </HistoryBox>
-  );
-}
-
-function HistoryBox({ children }) {
-  return (
-    <div style={{
-      background: "#F7FAFD", border: "1px solid #dce8f0", borderRadius: 8,
-      padding: "10px 16px", marginBottom: 16, maxHeight: 260, overflowY: "auto",
-    }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#2E75B6",
-        textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
-        Previous Visits
+        {s.drugs.map((d, i) => {
+          const name = d.generic_name || d.drug_name || "Unknown";
+          const dose = d.dose ? ` ${d.dose}${d.dose_unit ? " " + d.dose_unit : ""}` : "";
+          const freq = d.frequency ? `, ${d.frequency}` : "";
+          return <div key={i} className="visit-drug">• {name}{dose}{freq}</div>;
+        })}
       </div>
-      {children}
+    ));
+  }
+
+  return (
+    <div className="history-box">
+      <div className="h-title">Previous visits</div>
+      {body}
     </div>
   );
 }
