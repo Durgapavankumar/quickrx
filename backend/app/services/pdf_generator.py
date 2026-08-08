@@ -1,161 +1,215 @@
+"""
+Prescription PDF — designed to look like a real clinic letterhead script,
+not a data dump: serif letterhead, patient strip, big ℞, numbered regimen
+lines, safety warnings, and a signature block.
+"""
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import mm
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 )
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
-from pathlib import Path
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 import io
 
-from app.models.prescription import PrescriptionSession, ConfidenceLevel
+from app.models.prescription import PrescriptionSession
+from app.services.safety import check_interactions
 
-NAVY = colors.HexColor("#1F3864")
-BLUE = colors.HexColor("#2E75B6")
-GREEN = colors.HexColor("#2E7D32")
-ORANGE = colors.HexColor("#C55A11")
-LIGHT_GREY = colors.HexColor("#F5F5F5")
-FLAG_YELLOW = colors.HexColor("#FFF3CD")
+# palette — matches the web app's paper/ink/emerald design system
+INK      = colors.HexColor("#14231D")
+INK_SOFT = colors.HexColor("#3D4F46")
+MUTED    = colors.HexColor("#6B7A71")
+ACCENT   = colors.HexColor("#0B7A55")
+PAPER    = colors.HexColor("#F6F4EE")
+LINE     = colors.HexColor("#D8D4C8")
+WARN     = colors.HexColor("#A75A08")
+WARN_BG  = colors.HexColor("#FAF0E1")
+DANGER   = colors.HexColor("#B3261E")
+DANGER_BG = colors.HexColor("#FBEBE9")
+
+S = {
+    "clinic":   ParagraphStyle("clinic", fontName="Times-Bold", fontSize=22,
+                               textColor=INK, leading=26),
+    "doctor":   ParagraphStyle("doctor", fontName="Helvetica", fontSize=10.5,
+                               textColor=INK_SOFT, leading=14),
+    "date":     ParagraphStyle("date", fontName="Helvetica", fontSize=10,
+                               textColor=MUTED, alignment=TA_RIGHT),
+    "plabel":   ParagraphStyle("plabel", fontName="Helvetica-Bold", fontSize=7.5,
+                               textColor=ACCENT, leading=11),
+    "pvalue":   ParagraphStyle("pvalue", fontName="Helvetica", fontSize=10.5,
+                               textColor=INK, leading=13),
+    "rx":       ParagraphStyle("rx", fontName="Times-BoldItalic", fontSize=30,
+                               textColor=INK, leading=34),
+    "drugname": ParagraphStyle("drugname", fontName="Times-Bold", fontSize=13,
+                               textColor=INK, leading=16),
+    "regimen":  ParagraphStyle("regimen", fontName="Helvetica", fontSize=10,
+                               textColor=INK_SOFT, leading=14),
+    "note":     ParagraphStyle("note", fontName="Helvetica-Oblique", fontSize=9,
+                               textColor=MUTED, leading=12),
+    "alert":    ParagraphStyle("alert", fontName="Helvetica", fontSize=9,
+                               textColor=WARN, leading=12),
+    "warnhead": ParagraphStyle("warnhead", fontName="Helvetica-Bold", fontSize=9.5,
+                               textColor=DANGER, leading=13),
+    "warnline": ParagraphStyle("warnline", fontName="Helvetica", fontSize=9,
+                               textColor=INK_SOFT, leading=13),
+    "sig":      ParagraphStyle("sig", fontName="Helvetica", fontSize=10,
+                               textColor=INK, alignment=TA_RIGHT, leading=14),
+    "footer":   ParagraphStyle("footer", fontName="Helvetica", fontSize=7,
+                               textColor=MUTED, alignment=TA_CENTER, leading=10),
+}
+
+
+def _dr(name: str | None) -> str:
+    if not name:
+        return "—"
+    return name if name.lower().startswith("dr") else f"Dr. {name}"
 
 
 def generate_prescription_pdf(session: PrescriptionSession) -> bytes:
-    """Returns PDF bytes for a given PrescriptionSession."""
-
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=A4,
-        rightMargin=20*mm, leftMargin=20*mm,
-        topMargin=15*mm, bottomMargin=15*mm
+        rightMargin=18*mm, leftMargin=18*mm,
+        topMargin=16*mm, bottomMargin=14*mm,
     )
-
-    styles = getSampleStyleSheet()
-    elements = []
-
-    # --- Header ---
-    header_style = ParagraphStyle("header", fontSize=20, textColor=NAVY,
-                                  fontName="Helvetica-Bold", alignment=TA_CENTER)
-    sub_style = ParagraphStyle("sub", fontSize=10, textColor=BLUE,
-                               fontName="Helvetica", alignment=TA_CENTER)
-    elements.append(Paragraph("QuickRx Voice", header_style))
-    elements.append(Paragraph("AI-Assisted Prescription", sub_style))
-    elements.append(Spacer(1, 4*mm))
-    elements.append(HRFlowable(width="100%", thickness=2, color=NAVY))
-    elements.append(Spacer(1, 4*mm))
-
-    # --- Patient + Doctor block ---
     info = session.patient_info
-    label = ParagraphStyle("lbl", fontSize=9, fontName="Helvetica-Bold", textColor=NAVY)
-    val = ParagraphStyle("val", fontSize=9, fontName="Helvetica")
+    el = []
 
-    info_data = [
-        ["Patient:", info.patient_name or "—",   "Doctor:", info.doctor_name or "—"],
-        ["Age:",     info.patient_age or "—",    "Clinic:", info.clinic_name or "—"],
-        ["Gender:",  info.patient_gender or "—", "Date:",   info.date or "—"],
-    ]
-
-    info_table = Table(info_data, colWidths=[25*mm, 65*mm, 25*mm, 55*mm])
-    info_table.setStyle(TableStyle([
-        ("FONTNAME",    (0,0), (-1,-1), "Helvetica"),
-        ("FONTNAME",    (0,0), (0,-1), "Helvetica-Bold"),
-        ("FONTNAME",    (2,0), (2,-1), "Helvetica-Bold"),
-        ("FONTSIZE",    (0,0), (-1,-1), 9),
-        ("TEXTCOLOR",   (0,0), (0,-1), NAVY),
-        ("TEXTCOLOR",   (2,0), (2,-1), NAVY),
-        ("VALIGN",      (0,0), (-1,-1), "MIDDLE"),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+    # ---- Letterhead -------------------------------------------------------
+    clinic = info.clinic_name or "QuickRx Voice Clinic"
+    head = Table(
+        [[Paragraph(clinic, S["clinic"]),
+          Paragraph(f"Date<br/><b>{info.date or '—'}</b>", S["date"])],
+         [Paragraph(f"{_dr(info.doctor_name)} &nbsp;·&nbsp; Consultation record", S["doctor"]), ""]],
+        colWidths=[128*mm, 46*mm],
+    )
+    head.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ("TOPPADDING", (0, 0), (-1, -1), 1),
     ]))
-    elements.append(info_table)
-    elements.append(Spacer(1, 5*mm))
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=BLUE))
-    elements.append(Spacer(1, 4*mm))
+    el.append(head)
+    el.append(Spacer(1, 4*mm))
+    el.append(HRFlowable(width="100%", thickness=1.6, color=INK))
+    el.append(Spacer(1, 5*mm))
 
-    # --- Prescription heading ---
-    rx_style = ParagraphStyle("rx", fontSize=13, fontName="Helvetica-Bold",
-                               textColor=NAVY)
-    elements.append(Paragraph("Rx — Prescribed Medications", rx_style))
-    elements.append(Spacer(1, 3*mm))
+    # ---- Patient strip ----------------------------------------------------
+    def cell(label, value):
+        return [Paragraph(label.upper(), S["plabel"]), Paragraph(value or "—", S["pvalue"])]
 
-    # --- Drug table ---
-    col_headers = ["#", "Drug / Generic Name", "Dose", "Frequency",
-                   "Duration", "Route", "Instructions", "Notes"]
-    table_data = [col_headers]
+    strip = Table(
+        [[cell("Patient", info.patient_name),
+          cell("Age", info.patient_age),
+          cell("Sex", info.patient_gender),
+          cell("Visit ID", session.session_id[:8])]],
+        colWidths=[70*mm, 30*mm, 34*mm, 40*mm],
+    )
+    strip.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), PAPER),
+        ("BOX", (0, 0), (-1, -1), 0.75, LINE),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 9),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    el.append(strip)
+    el.append(Spacer(1, 7*mm))
 
+    # ---- Rx mark (the ℞ glyph is missing from the base-14 PDF fonts) ----
+    el.append(Paragraph("Rx", S["rx"]))
+    el.append(Spacer(1, 2*mm))
+
+    # ---- Regimen lines ----------------------------------------------------
     for i, drug in enumerate(session.drugs, 1):
-        dose_str = f"{drug.dose or '—'} {drug.dose_unit or ''}".strip()
-        note = ""
-        if drug.flagged_for_review:
-            note = "⚠ Review"
-        elif drug.manually_verified:
-            note = "✓ Verified"
-        elif drug.confidence_level == ConfidenceLevel.HIGH:
-            note = "✓"
+        name = drug.generic_name or drug.drug_name or "—"
+        title = f"{i}.&nbsp;&nbsp;{name}"
+        if drug.dose:
+            title += f" &nbsp;{drug.dose} {drug.dose_unit or ''}".rstrip()
 
-        drug_display = drug.generic_name or drug.drug_name or "—"
-        if drug.drug_name and drug.generic_name and drug.drug_name.lower() != drug.generic_name.lower():
-            drug_display = f"{drug.generic_name}\n({drug.drug_name})"
+        parts = []
+        if drug.frequency:
+            parts.append(drug.frequency)
+        if drug.duration:
+            parts.append(f"for {drug.duration} {drug.duration_unit or ''}".strip())
+        if drug.route and drug.route != "oral":
+            parts.append(drug.route)
+        regimen = "  ·  ".join(parts) if parts else "—"
+        if drug.instructions:
+            regimen += f"  ·  <i>{drug.instructions}</i>"
 
-        table_data.append([
-            str(i),
-            drug_display,
-            dose_str if dose_str != "—" else "—",
-            drug.frequency or "—",
-            f"{drug.duration or '—'} {drug.duration_unit or ''}".strip() or "—",
-            drug.route or "oral",
-            drug.instructions or "—",
-            note,
-        ])
+        rows = [[Paragraph(title, S["drugname"])],
+                [Paragraph(regimen, S["regimen"])]]
+        if drug.dose_alert:
+            rows.append([Paragraph(f"&#9888; {drug.dose_alert}", S["alert"])])
+        if drug.flagged_for_review and not drug.manually_verified:
+            rows.append([Paragraph("&#9888; Low extraction confidence — verify before dispensing.", S["alert"])])
 
-    col_widths = [8*mm, 42*mm, 22*mm, 25*mm, 18*mm, 18*mm, 28*mm, 12*mm]
-    drug_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        block = Table(rows, colWidths=[174*mm])
+        block.setStyle(TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, 0), 3),
+            ("BOTTOMPADDING", (0, -1), (-1, -1), 5),
+            ("TOPPADDING", (0, 1), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 1),
+            ("LINEBELOW", (0, -1), (-1, -1), 0.5, LINE),
+        ]))
+        el.append(block)
+        el.append(Spacer(1, 2.5*mm))
 
-    style_cmds = [
-        ("BACKGROUND",   (0,0), (-1,0),  NAVY),
-        ("TEXTCOLOR",    (0,0), (-1,0),  colors.white),
-        ("FONTNAME",     (0,0), (-1,0),  "Helvetica-Bold"),
-        ("FONTSIZE",     (0,0), (-1,-1), 8),
-        ("FONTNAME",     (0,1), (-1,-1), "Helvetica"),
-        ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
-        ("ALIGN",        (0,0), (0,-1),  "CENTER"),
-        ("ALIGN",        (7,0), (7,-1),  "CENTER"),
-        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, LIGHT_GREY]),
-        ("GRID",         (0,0), (-1,-1), 0.4, colors.HexColor("#CCCCCC")),
-        ("TOPPADDING",   (0,0), (-1,-1), 4),
-        ("BOTTOMPADDING",(0,0), (-1,-1), 4),
-        ("LEFTPADDING",  (0,0), (-1,-1), 4),
-    ]
+    if not session.drugs:
+        el.append(Paragraph("No medications recorded.", S["note"]))
 
-    # Highlight flagged rows
-    for i, drug in enumerate(session.drugs, 1):
-        if drug.flagged_for_review:
-            style_cmds.append(("BACKGROUND", (0, i), (-1, i), FLAG_YELLOW))
-            style_cmds.append(("TEXTCOLOR",  (7, i), (7, i),  ORANGE))
+    # ---- Safety warnings ----------------------------------------------------
+    interactions = check_interactions(session.drugs)
+    if interactions:
+        el.append(Spacer(1, 4*mm))
+        warn_rows = [[Paragraph("&#9888; DRUG INTERACTION ALERTS", S["warnhead"])]]
+        for ix in interactions:
+            sev = "MAJOR" if ix.severity == "major" else "Moderate"
+            warn_rows.append([Paragraph(
+                f"<b>{ix.drug_a} + {ix.drug_b}</b> ({sev}): {ix.note}", S["warnline"])])
+        warn = Table(warn_rows, colWidths=[174*mm])
+        warn.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), DANGER_BG),
+            ("BOX", (0, 0), (-1, -1), 0.75, DANGER),
+            ("LEFTPADDING", (0, 0), (-1, -1), 9),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 9),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        el.append(warn)
 
-    drug_table.setStyle(TableStyle(style_cmds))
-    elements.append(drug_table)
-    elements.append(Spacer(1, 5*mm))
-
-    # --- Flagged warning ---
     if session.flagged_count > 0:
-        warn_style = ParagraphStyle("warn", fontSize=8, textColor=ORANGE,
-                                    fontName="Helvetica-Bold")
-        elements.append(Paragraph(
-            f"⚠ {session.flagged_count} drug(s) flagged for clinician review "
-            f"(low extraction confidence). Please verify before dispensing.",
-            warn_style
-        ))
-        elements.append(Spacer(1, 3*mm))
+        el.append(Spacer(1, 3*mm))
+        el.append(Paragraph(
+            f"&#9888; {session.flagged_count} entr{'y' if session.flagged_count == 1 else 'ies'} "
+            f"flagged for clinician review (low extraction confidence).",
+            S["alert"]))
 
-    # --- Footer ---
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=BLUE))
-    elements.append(Spacer(1, 3*mm))
-    footer_style = ParagraphStyle("footer", fontSize=7, textColor=colors.grey,
-                                  fontName="Helvetica", alignment=TA_CENTER)
-    elements.append(Paragraph(
-        "Generated by QuickRx Voice MVP — AI-assisted, not a substitute for clinical judgment. "
-        "Clinician must verify all flagged entries before dispensing.",
-        footer_style
-    ))
+    # ---- Signature ----------------------------------------------------------
+    el.append(Spacer(1, 18*mm))
+    sig = Table(
+        [[Paragraph("_______________________", S["sig"])],
+         [Paragraph(f"<b>{_dr(info.doctor_name)}</b><br/>Signature &amp; stamp", S["sig"])]],
+        colWidths=[174*mm],
+    )
+    sig.setStyle(TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    el.append(sig)
 
-    doc.build(elements)
+    # ---- Footer -------------------------------------------------------------
+    el.append(Spacer(1, 8*mm))
+    el.append(HRFlowable(width="100%", thickness=0.5, color=LINE))
+    el.append(Spacer(1, 2*mm))
+    el.append(Paragraph(
+        "Generated by QuickRx Voice — AI-assisted transcription with clinician verification. "
+        "Not valid without signature. Interaction alerts are decision support, not a complete interaction database.",
+        S["footer"]))
+
+    doc.build(el)
     return buffer.getvalue()
