@@ -1,6 +1,6 @@
-# QuickRx backend — FastAPI + faster-whisper (CPU).
-# The Whisper model (~145 MB) downloads on first transcription and is cached
-# in the whisper-models volume, so it is fetched once, not on every rebuild.
+# QuickRx backend — FastAPI + Wav2Vec2-Indic for Indian English ASR.
+# The model (~500 MB) downloads on first transcription and is cached
+# in the models volume, so it is fetched once, not on every rebuild.
 FROM python:3.11-slim
 
 WORKDIR /app

@@ -8,10 +8,9 @@ class Settings:
     VERSION: str = "1.0.0"
     API_PREFIX: str = "/api/v1"
 
-    # ASR
-    WHISPER_MODEL: str = "base.en"          # free, ~145MB, English-only, fast on CPU
-    WHISPER_DEVICE: str = "cpu"
-    WHISPER_COMPUTE_TYPE: str = "int8"      # lowest memory footprint on CPU
+    # ASR — Indian English optimized
+    ASR_MODEL: str = "ai4bharat/indicwav2vec_v1_hindi"  # Indic model fine-tuned for Indian English
+    ASR_DEVICE: str = "cpu"                 # "cpu" or "cuda" if GPU available
 
     # NLP
     DRUG_DICTIONARY_PATH: Path = BASE_DIR / "data" / "drug_dictionary.json"

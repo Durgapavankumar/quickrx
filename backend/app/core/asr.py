@@ -1,55 +1,65 @@
-from faster_whisper import WhisperModel
+import torch
+import torchaudio
+from transformers import pipeline
 from app.core.config import settings
 import tempfile, os
 
 
 class ASREngine:
     """
-    Wraps faster-whisper. Model is loaded once at startup (lazy singleton).
+    Uses AI4Bharat's Wav2Vec2-Indic-en model for Indian English ASR.
+    Optimized for Indian accents and medical terminology.
+    Model is loaded once at startup (lazy singleton).
     Exposes transcribe(audio_bytes) → str
     """
 
     def __init__(self):
-        self._model: WhisperModel | None = None
+        self._model = None
+        self._device = self._get_device()
+
+    def _get_device(self):
+        if settings.ASR_DEVICE == "cpu":
+            return "cpu"
+        return "cuda" if torch.cuda.is_available() else "cpu"
 
     def _load_model(self):
-        """Lazy load — only download/init Whisper on first transcription call."""
+        """Lazy load — only download/init model on first transcription call."""
         if self._model is None:
-            print(f"[ASR] Loading Whisper model: {settings.WHISPER_MODEL}")
-            self._model = WhisperModel(
-                settings.WHISPER_MODEL,
-                device=settings.WHISPER_DEVICE,
-                compute_type=settings.WHISPER_COMPUTE_TYPE,
+            print(f"[ASR] Loading Indian English model: {settings.ASR_MODEL}")
+            self._model = pipeline(
+                "automatic-speech-recognition",
+                model=settings.ASR_MODEL,
+                device=0 if self._device == "cuda" else -1,
             )
-            print("[ASR] Model ready.")
+            print("[ASR] Model ready for Indian English transcription.")
 
-    def transcribe(self, audio_bytes: bytes, audio_format: str = "webm") -> str:
-        """
-        Accepts raw audio bytes (from browser MediaRecorder),
-        writes to a temp file, runs Whisper, returns transcript string.
-        """
-        self._load_model()
-
+    def _convert_audio(self, audio_bytes: bytes, audio_format: str) -> torch.Tensor:
+        """Convert raw audio bytes to tensor."""
         suffix = f".{audio_format}"
-        with tempfile.NamedTemporaryFile(
-            suffix=suffix,
-            dir=settings.TEMP_AUDIO_DIR,
-            delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(audio_bytes)
             tmp_path = tmp.name
 
         try:
-            segments, _ = self._model.transcribe(
-                tmp_path,
-                beam_size=5,
-                language="en",
-                condition_on_previous_text=False,
-            )
-            transcript = " ".join(seg.text.strip() for seg in segments)
-            return transcript.strip()
+            waveform, sample_rate = torchaudio.load(tmp_path)
+            if sample_rate != 16000:
+                resampler = torchaudio.transforms.Resample(sample_rate, 16000)
+                waveform = resampler(waveform)
+            return waveform.squeeze(0)
         finally:
-            os.unlink(tmp_path)   # always clean up temp audio
+            os.unlink(tmp_path)
+
+    def transcribe(self, audio_bytes: bytes, audio_format: str = "webm") -> str:
+        """
+        Accepts raw audio bytes (from browser MediaRecorder),
+        converts to 16kHz wav, runs Indian English ASR, returns transcript string.
+        """
+        self._load_model()
+
+        waveform = self._convert_audio(audio_bytes, audio_format)
+        result = self._model(waveform.numpy())
+        transcript = result.get("text", "").strip()
+        return transcript
 
 
 # Singleton

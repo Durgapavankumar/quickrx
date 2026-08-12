@@ -12,7 +12,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - whisper-models:/models   # Whisper model cache — downloaded once
+      - whisper-models:/models   # HuggingFace model cache — downloaded once
       - quickrx-data:/data       # SQLite DB — sessions survive restarts
     restart: unless-stopped
 
