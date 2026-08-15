@@ -7,6 +7,7 @@ NLP confidence score (which is preserved untouched for the audit trail).
 """
 from app.core.nlp.validator import drug_validator
 from app.models.prescription import DrugEntry, DrugEntryUpdate
+from app.services.safety import check_dose
 
 
 def apply_drug_correction(original: DrugEntry, update: DrugEntryUpdate) -> DrugEntry:
@@ -32,6 +33,10 @@ def apply_drug_correction(original: DrugEntry, update: DrugEntryUpdate) -> DrugE
         else:
             corrected.generic_name = corrected.drug_name
             corrected.category = None
+
+    # re-run the dose sanity check against the (possibly new) drug/dose
+    record, _ = drug_validator.lookup(corrected.generic_name or corrected.drug_name or "")
+    corrected.dose_alert = check_dose(record, corrected.dose, corrected.dose_unit)
 
     corrected.manually_verified = True
     corrected.flagged_for_review = False

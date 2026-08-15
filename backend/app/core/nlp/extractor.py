@@ -7,6 +7,7 @@ from app.core.nlp.patterns import (
 from app.core.nlp.validator import drug_validator
 from app.core.config import settings
 from app.models.prescription import DrugEntry, ConfidenceLevel
+from app.services.safety import check_dose
 
 
 class PrescriptionExtractor:
@@ -30,6 +31,7 @@ class PrescriptionExtractor:
         dose, dose_unit = self._extract_dose(text)
         entry.dose = dose
         entry.dose_unit = dose_unit
+        entry.dose_alert = check_dose(drug_record, dose, dose_unit)
 
         entry.frequency = self._extract_frequency(text)
         duration, duration_unit = self._extract_duration(text)

@@ -26,6 +26,15 @@ class DrugEntry(BaseModel):
     flagged_for_review: bool = False
     manually_verified: bool = False          # clinician reviewed/corrected this entry
     raw_transcript: Optional[str] = None     # original ASR text for audit trail
+    dose_alert: Optional[str] = None         # dose looks unusual vs formulary strengths
+
+
+class InteractionAlert(BaseModel):
+    """A clinically significant interaction between two drugs in one session."""
+    drug_a: str
+    drug_b: str
+    severity: str                            # "major" | "moderate"
+    note: str
 
 
 class DrugEntryUpdate(BaseModel):
@@ -61,6 +70,9 @@ class PrescriptionSession(BaseModel):
     drugs: list[DrugEntry] = []
     flagged_count: int = 0
     created_at: str
+    # Recomputed from the current drug list whenever a session is returned —
+    # never authored by hand (see services/safety.py).
+    interactions: list[InteractionAlert] = []
 
 
 class PatientSummary(BaseModel):
