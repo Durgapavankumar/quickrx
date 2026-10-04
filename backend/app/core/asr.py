@@ -2,7 +2,11 @@ import torch
 import torchaudio
 from transformers import pipeline
 from app.core.config import settings
+from app.core.audio_validation import audio_validator
 import tempfile, os
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ASREngine:
@@ -54,12 +58,26 @@ class ASREngine:
         Accepts raw audio bytes (from browser MediaRecorder),
         converts to 16kHz wav, runs Indian English ASR, returns transcript string.
         """
+        # Validate audio before processing
+        is_valid, error_msg = audio_validator.validate_audio_bytes(audio_bytes, audio_format)
+        if not is_valid:
+            raise ValueError(f"Audio validation failed: {error_msg}")
+
+        # Log audio metrics
+        metrics = audio_validator.get_audio_metrics(audio_bytes, audio_format)
+        if metrics:
+            logger.info(f"[ASR] Processing audio: {metrics}")
+
         self._load_model()
 
-        waveform = self._convert_audio(audio_bytes, audio_format)
-        result = self._model(waveform.numpy())
-        transcript = result.get("text", "").strip()
-        return transcript
+        try:
+            waveform = self._convert_audio(audio_bytes, audio_format)
+            result = self._model(waveform.numpy())
+            transcript = result.get("text", "").strip()
+            return transcript
+        except Exception as e:
+            logger.error(f"[ASR] Transcription failed: {str(e)}")
+            raise
 
 
 # Singleton

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from app.core.asr import asr_engine
+from app.core.audio_validation import audio_validator
 from app.core.nlp.extractor import extractor
 from app.services.session_store import session_store
 from app.models.prescription import TranscribeResponse
@@ -27,7 +28,17 @@ async def transcribe_audio(
     content_type = audio.content_type or "audio/webm"
     fmt = content_type.split("/")[-1].split(";")[0]  # e.g. "webm", "wav"
 
-    transcript = asr_engine.transcribe(audio_bytes, audio_format=fmt)
+    # Validate audio before processing
+    is_valid, error_msg = audio_validator.validate_audio_bytes(audio_bytes, fmt)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=f"Audio validation failed: {error_msg}")
+
+    try:
+        transcript = asr_engine.transcribe(audio_bytes, audio_format=fmt)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription error: {str(e)}")
 
     if not transcript:
         raise HTTPException(status_code=422, detail="ASR returned empty transcript.")
